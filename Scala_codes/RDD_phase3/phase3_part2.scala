@@ -3,7 +3,7 @@
 // =======================
 // Task 1: Data Loading & Setup
 // =======================
-val df = spark.read.option("header","true").csv("file:/D:/BigData/phase2Data/transformed_data.csv")
+val df = spark.read.option("header","true").csv("../../Outputs/preprocessing_phase2/phase2_5_3_transformed_data/transformed_data.csv")
 val rdd = df.rdd
 
 println("Total records: " + rdd.count())
