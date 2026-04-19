@@ -1,0 +1,132 @@
+Microsoft Windows [Version 10.0.26200.8039]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Users\ragha>spark-shell
+Unable to get Charset 'cp720' for property 'sun.stderr.encoding', using default windows-1256 and continuing.
+Unable to get Charset 'cp720' for property 'sun.stderr.encoding', using default windows-1256 and continuing.
+Setting default log level to "WARN".
+To adjust logging level use sc.setLogLevel(newLevel). For SparkR, use setLogLevel(newLevel).
+26/04/14 00:04:16 WARN NativeCodeLoader: Unable to load native-hadoop library for your platform... using builtin-java classes where applicable
+Spark context Web UI available at http://192.168.100.22:4040
+Spark context available as 'sc' (master = local[*], app id = local-1776114257782).
+Spark session available as 'spark'.
+Welcome to
+      ____              __
+     / __/__  ___ _____/ /__
+    _\ \/ _ \/ _ `/ __/  '_/
+   /___/ .__/\_,_/_/ /_/\_\   version 3.5.8
+      /_/
+
+Using Scala version 2.12.18 (OpenJDK 64-Bit Server VM, Java 11.0.30)
+Type in expressions to have them evaluated.
+Type :help for more information.
+
+scala> import org.apache.spark.sql.functions._; import org.apache.spark.ml.feature.{VectorAssembler, StandardScaler}; import org.apache.spark.ml.Pipeline; import org.apache.spark.ml.clustering.KMeans; import org.apache.spark.ml.evaluation.ClusteringEvaluator
+import org.apache.spark.sql.functions._
+import org.apache.spark.ml.feature.{VectorAssembler, StandardScaler}
+import org.apache.spark.ml.Pipeline
+import org.apache.spark.ml.clustering.KMeans
+import org.apache.spark.ml.evaluation.ClusteringEvaluator
+
+scala> val rawDF = spark.read.option("header","true").option("inferSchema","true").csv("file:/D:/BigData/phase2Data/transformed_data.csv")
+[Stage 0:>                                                          (0 + 1)                                                                             [Stage 1:>                                                          (0 + 8) [Stage 1:=======>                                                   (1 + 7) [Stage 1:===================================================>       (7 + 1)                                                                             rawDF: org.apache.spark.sql.DataFrame = [Primary Type: string, Location Description: string ... 23 more fields]
+
+scala> println("Rows: " + rawDF.count() + " | Columns: " + rawDF.columns.length)
+[Stage 2:>                                                          (0 + 8)                                                                             Rows: 419883 | Columns: 25
+
+scala> rawDF.show(5,false)
++--------------------+--------------------+-------------------+----+------+--------+--------+--------------+------------+-------------+----+-------+-----+----------+------------+----------+--------+-----------+--------------+----------------------+--------------------+----------------------+-------------------+-----------------+------------------+
+|Primary Type        |Location Description|Date               |Year|Arrest|Domestic|District|Community Area|Latitude    |Longitude    |Hour|Weekday|Month|Arrest_Int|Domestic_Int|Is_Weekend|Is_Night|Time_Of_Day|Crime_Hour_Bin|District_Community_Key|Location_Crime_Count|PrimaryType_ArrestRate|Is_Hotspot_Location|PrimaryType_Index|LocationDesc_Index|
++--------------------+--------------------+-------------------+----+------+--------+--------+--------------+------------+-------------+----+-------+-----+----------+------------+----------+--------+-----------+--------------+----------------------+--------------------+----------------------+-------------------+-----------------+------------------+
+|liquor law violation|cta platform        |2005-09-14 19:50:45|2005|true  |false   |7       |69            |41.769185486|-87.625732415|19  |4      |9    |1         |0           |0         |0       |Evening    |4             |7_69                  |2136                |0.9882044560943644    |1                  |18.0             |22.0              |
+|liquor law violation|cta platform        |2001-11-14 21:00:00|2001|true  |false   |1       |NULL          |41.868040997|-87.627290382|21  |4      |11   |1         |0           |0         |1       |Evening    |5             |NULL                  |2136                |0.9882044560943644    |1                  |18.0             |22.0              |
+|battery             |cta platform        |2024-06-22 11:20:00|2024|false |false   |11      |26            |41.885487535|-87.726422045|11  |7      |6    |0         |0           |1         |0       |Morning    |2             |11_26                 |2136                |0.21591895428223498   |1                  |1.0              |22.0              |
+|battery             |cta platform        |2024-03-26 13:35:00|2024|false |false   |1       |32            |41.878574487|-87.633743652|13  |3      |3    |0         |0           |0         |0       |Afternoon  |3             |1_32                  |2136                |0.21591895428223498   |1                  |1.0              |22.0              |
+|battery             |cta platform        |2023-06-21 00:20:00|2023|false |false   |16      |11            |41.97008868 |-87.762690091|0   |4      |6    |0         |0           |0         |1       |Night      |0             |16_11                 |2136                |0.21591895428223498   |1                  |1.0              |22.0              |
++--------------------+--------------------+-------------------+----+------+--------+--------+--------------+------------+-------------+----+-------+-----+----------+------------+----------+--------+-----------+--------------+----------------------+--------------------+----------------------+-------------------+-----------------+------------------+
+only showing top 5 rows
+
+
+scala> val featureCols = Array("Latitude","Longitude","Hour","Location_Crime_Count","PrimaryType_ArrestRate")
+featureCols: Array[String] = Array(Latitude, Longitude, Hour, Location_Crime_Count, PrimaryType_ArrestRate)
+
+scala> val contextCols = Seq("Primary Type","District","Time_Of_Day","Is_Night","Is_Weekend")
+contextCols: Seq[String] = List(Primary Type, District, Time_Of_Day, Is_Night, Is_Weekend)
+
+scala> var df = rawDF.select((featureCols.map(col) ++ contextCols.map(col)): _*)
+df: org.apache.spark.sql.DataFrame = [Latitude: double, Longitude: double ... 8 more fields]
+
+scala> df = df.na.drop(featureCols)
+df: org.apache.spark.sql.DataFrame = [Latitude: double, Longitude: double ... 8 more fields]
+
+scala> df = df.na.fill("unknown", Seq("Primary Type","Time_Of_Day")); df = df.na.fill(0, Seq("District","Is_Night","Is_Weekend"))
+df: org.apache.spark.sql.DataFrame = [Latitude: double, Longitude: double ... 8 more fields]
+df: org.apache.spark.sql.DataFrame = [Latitude: double, Longitude: double ... 8 more fields]
+
+scala> featureCols.foreach(c => df = df.withColumn(c, col(c).cast("double")))
+
+scala> df.select(featureCols.map(col): _*).describe().show(false)
+26/04/14 00:08:25 WARN SparkStringUtils: Truncated the string representation of a plan since it was too large. This behavior can be adjusted by setting 'spark.sql.debug.maxToStringFields'.
+[Stage 6:>                                                          (0 + 8) [Stage 6:=======>                                                   (1 + 7)                                                                             +-------+-------------------+--------------------+------------------+--------------------+----------------------+
+|summary|Latitude           |Longitude           |Hour              |Location_Crime_Count|PrimaryType_ArrestRate|
++-------+-------------------+--------------------+------------------+--------------------+----------------------+
+|count  |419883             |419883              |419883            |419883              |419883                |
+|mean   |41.842406956030715 |-87.67126385690644  |13.098744173972273|51370.25636427291   |0.25064839491003005   |
+|stddev |0.08980122030383618|0.061979081995622555|6.743998705549545 |41702.99595999077   |0.2832795897673914    |
+|min    |36.619446395       |-91.686565684       |0.0               |1.0                 |0.0                   |
+|max    |42.022642635       |-87.524529465       |23.0              |110079.0            |1.0                   |
++-------+-------------------+--------------------+------------------+--------------------+----------------------+
+
+
+scala> val assembler = new VectorAssembler().setInputCols(featureCols).setOutputCol("features_raw").setHandleInvalid("skip")
+assembler: org.apache.spark.ml.feature.VectorAssembler = VectorAssembler: uid=vecAssembler_275fb506e09c, handleInvalid=skip, numInputCols=5
+
+scala> val scaler = new StandardScaler().setInputCol("features_raw").setOutputCol("features").setWithMean(true).setWithStd(true)
+scaler: org.apache.spark.ml.feature.StandardScaler = stdScal_e70299ae72fd
+
+scala> val prepPipeline = new Pipeline().setStages(Array(assembler, scaler))
+prepPipeline: org.apache.spark.ml.Pipeline = pipeline_78218325c24d
+
+scala> val Array(trainRaw, testRaw) = df.randomSplit(Array(0.8, 0.2), 42)
+trainRaw: org.apache.spark.sql.Dataset[org.apache.spark.sql.Row] = [Latitude: double, Longitude: double ... 8 more fields]
+testRaw: org.apache.spark.sql.Dataset[org.apache.spark.sql.Row] = [Latitude: double, Longitude: double ... 8 more fields]
+
+scala> println("Train rows: " + trainRaw.count()); println("Test rows: " + testRaw.count())
+[Stage 9:>                                                          (0 + 8)                                                                             Train rows: 336139
+[Stage 12:>                                                         (0 + 8)                                                                             Test rows: 83744
+
+scala> val pipelineModel = prepPipeline.fit(trainRaw)
+[Stage 15:>                                                         (0 + 8) [Stage 15:=======>                                                  (1 + 7)                                                                             pipelineModel: org.apache.spark.ml.PipelineModel = pipeline_78218325c24d
+
+scala> val trainDF = pipelineModel.transform(trainRaw); val testDF = pipelineModel.transform(testRaw)
+trainDF: org.apache.spark.sql.DataFrame = [Latitude: double, Longitude: double ... 10 more fields]
+testDF: org.apache.spark.sql.DataFrame = [Latitude: double, Longitude: double ... 10 more fields]
+
+scala> trainDF.select("features").show(5,false)
++----------------------------------------------------------------------------------------------------+
+|features                                                                                            |
++----------------------------------------------------------------------------------------------------+
+|[-58.21500752371364,-64.91170028630663,-1.0507911745300549,-1.0750373591133415,-0.12286164434154266]|
+|[-2.2033687534031983,1.125714856246382,1.3201890890185373,-0.9137838065410219,1.4945350187902904]   |
+|[-2.189725258352045,0.9146072020006529,0.5792577566596022,-0.9137838065410219,-0.6576814287090227]  |
+|[-2.1884534292220263,0.8891945198994873,0.43107149018781515,0.4009348413527571,-0.2716328006141043] |
+|[-2.1840734411457357,0.8807477668668363,-1.198977441001842,-1.2143813313302132,-0.6576814287090227] |
++----------------------------------------------------------------------------------------------------+
+only showing top 5 rows
+
+
+scala> val vectorSize = trainDF.select("features").first().getAs[org.apache.spark.ml.linalg.Vector]("features").size; println("Feature vector size: " + vectorSize)
+Feature vector size: 5
+vectorSize: Int = 5
+
+scala> val kmeans = new KMeans().setK(3).setSeed(42).setFeaturesCol("features").setPredictionCol("prediction")
+kmeans: org.apache.spark.ml.clustering.KMeans = kmeans_eb2fbfa2cf59
+
+scala> val kmeansModel = kmeans.fit(trainDF)
+[Stage 20:>                                                         (0 + 8) [Stage 20:====================================>                     (5 + 3)                                                                             [Stage 23:>                                                         (0 + 8) [Stage 23:=======>                                                  (1 + 7) [Stage 23:====================================>                     (5 + 3)                                                                             [Stage 29:>                                                         (0 + 8) [Stage 29:==================================================>       (7 + 1)                                                                             26/04/14 00:13:00 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
+[Stage 71:>                                                         (0 + 8) [Stage 71:=======>                                                  (1 + 7) [Stage 71:====================================>                     (5 + 3) [Stage 71:===========================================>              (6 + 2)                                                                             kmeansModel: org.apache.spark.ml.clustering.KMeansModel = KMeansModel: uid=kmeans_eb2fbfa2cf59, k=3, distanceMeasure=euclidean, numFeatures=5
+
+scala> kmeansModel.clusterCenters.foreach(println)
+[-0.04269767570179,-0.09966502567544352,0.28818421571864516,0.02905767473100569,2.291288137169258]
+[0.254521693852274,-0.24069617420093173,-1.0679308165613524,0.061526890293967386,-0.3881202186306099]
+[-0.14949932524859086,0.18093841454500412,0.5964747620212661,-0.047263218342336336,-0.4008853623591122]
